@@ -1,0 +1,20 @@
+[Unit]
+Description=cockroachdb
+Documentation=https://cockroachlabs.com/docs/stable
+
+[Service]
+ExecStart=/usr/local/bin/cockroach start \
+  --cluster-name={{ db_name }} \
+  --certs-dir=/tmp/certs/{{ inventory_hostname }} \
+  --store={{ inventory_hostname }} \
+  --advertise-addr={{ ansible_eth1.ipv4.address }}:{{ listen_port }} \
+  --http-addr={{ ansible_eth1.ipv4.address }}:{{ http_port }} \
+  --join={{ all_nodes }} \
+  --cache=.25 \
+  --max-sql-memory=.25 \
+  --disable-cluster-name-verification
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

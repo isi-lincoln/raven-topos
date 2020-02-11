@@ -6,6 +6,7 @@ function server(name) {
 		image: 'debian-buster',
 		cpu: { cores: 2 },
 		memory: { capacity: GB(4) },
+		mounts: [{ source: env.PWD+'/certs', point: '/tmp/certs' }],
 	};
 }
 

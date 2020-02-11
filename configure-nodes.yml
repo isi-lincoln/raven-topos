@@ -1,0 +1,116 @@
+- hosts: [a]
+  become: yes
+  tasks:
+    - name: create address
+      shell: ip addr add 10.0.0.10/24 dev eth1
+      ignore_errors: yes
+
+- hosts: [b]
+  become: yes
+  tasks:
+    - name: create address
+      shell: ip addr add 10.0.0.11/24 dev eth1
+      ignore_errors: yes
+
+- hosts: [c]
+  become: yes
+  tasks:
+    - name: create address
+      shell: ip addr add 10.0.0.12/24 dev eth1
+      ignore_errors: yes
+
+- hosts: [d]
+  become: yes
+  tasks:
+    - name: create address
+      shell: ip addr add 10.0.0.13/24 dev eth1
+      ignore_errors: yes
+
+- hosts: [a,b,c,d]
+  become: yes
+  vars:
+    - roach_version: v19.2.2
+  tasks:
+    - name: bring up interface
+      shell: ip link set dev eth1 up
+      ignore_errors: yes
+
+    - name: install prereq packages
+      apt:
+        name: wget
+        state: latest
+
+    - name: download cockroachdb
+      get_url:
+        url: "https://binaries.cockroachdb.com/cockroach-{{ roach_version }}.linux-amd64.tgz"
+        dest: /tmp/cockroach.tgz
+        mode: "0777"
+
+    - name: Unarchive a file that is already on the remote machine
+      unarchive:
+        src: /tmp/cockroach.tgz
+        dest: /tmp/
+        remote_src: yes
+
+    - name: copy over binary
+      copy:
+        src: "/tmp/cockroach-{{ roach_version }}.linux-amd64/cockroach"
+        dest: /usr/local/bin/cockroach
+        mode: "0777"
+        remote_src: yes
+
+    - name: create directories
+      file:
+        path: "/tmp/certs/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+
+- hosts: [a]
+  become: yes
+  tasks:
+    - name: create directories
+      file:
+        path: "/tmp/certs/safespace"
+        state: directory
+        mode: "0755"
+
+    - name: create the certs
+      shell: "cockroach cert create-ca --certs-dir=/tmp/certs/ --ca-key=/tmp/certs/safespace/ca-key.pem"
+
+- hosts: [a,b,c]
+  become: yes
+  vars:
+    - db_name: crdb
+    - listen_port: 25250
+    - http_port: 12125
+    - all_nodes: "10.0.0.10:{{listen_port}},10.0.0.11:{{listen_port}},10.0.0.12:{{listen_port}}"
+  tasks:
+    - name: copy client cert
+      copy:
+        src: /tmp/certs/ca.crt
+        dest: "/tmp/certs/{{ inventory_hostname }}/ca.crt"
+        remote_src: yes
+
+    - name: create the node certs?
+      shell: "cockroach cert create-node localhost {{ inventory_hostname }} {{ db_name }} {{ ansible_eth1.ipv4.address }} --certs-dir=/tmp/certs/{{ inventory_hostname }} --ca-key=/tmp/certs/safespace/ca-key.pem"
+
+    - name: copy template
+      template:
+        src: templates/crdb.service.j2
+        dest: /etc/systemd/system/cockroachdb.service
+
+    - name: start system
+      systemd:
+        name: cockroachdb
+        state: restarted
+        daemon_reload: yes
+
+
+- hosts: [a]
+  become: yes
+  tasks:
+    - name: create client cert
+      shell: "cockroach cert create-client root --certs-dir=/tmp/certs/{{ inventory_hostname }} --ca-key=/tmp/certs/safespace/ca-key.pem"
+
+    - name: initialize database
+      shell: "cockroach init --certs-dir=/tmp/certs/{{ inventory_hostname }} --host=localhost"
