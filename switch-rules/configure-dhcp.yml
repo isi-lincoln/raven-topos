@@ -1,0 +1,44 @@
+- hosts: [c]
+  become: yes
+  tasks:
+
+    - name: create address
+      shell: ip addr add 192.168.1.1/24 dev eth1
+      ignore_errors: yes
+
+    - name: bring up interface
+      shell: ip link set dev eth1 up
+      ignore_errors: yes
+
+    - name: install dhcp server
+      apt:
+        name: isc-dhcp-server
+        state: latest
+
+    - name: configure interface dhcp
+      copy:
+        dest: /etc/default/isc-dhcp-server
+        content:
+                INTERFACESv4="eth1"
+
+    - name: configure dhcp
+      copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content:
+                # Sample /etc/dhcpd.conf
+                default-lease-time 600;
+                max-lease-time 7200;
+                option subnet-mask 255.255.255.0;
+                option broadcast-address 192.168.1.255;
+                option routers 192.168.1.254;
+                option domain-name-servers 8.8.8.8 8.8.4.4;
+                option domain-name "test.example";
+
+                subnet 192.168.1.0 netmask 255.255.255.0 {
+                range 192.168.1.10 192.168.1.100;
+                }
+
+    - name: restart dhcp
+      systemd:
+        name: isc-dhcp-server
+        state: restarted
